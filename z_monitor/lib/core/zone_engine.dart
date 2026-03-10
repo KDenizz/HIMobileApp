@@ -25,9 +25,9 @@ class ZoneEngine {
       case "A":
         return const Color(0xFF2ecc71); // Yeşil
       case "B":
-        return const Color.fromARGB(255, 219, 208, 52); // Mavi
+        return const Color.fromARGB(255, 219, 208, 52); // Sarı
       case "C":
-        return const Color.fromARGB(255, 223, 135, 3); // Sarı
+        return const Color.fromARGB(255, 223, 135, 3); // Turuncu
       case "D":
         return const Color(0xFFe74c3c); // Kırmızı
       default:

@@ -267,7 +267,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       color: const Color(0xFF00E5FF),
                       barWidth: 2,
                       dotData: const FlDotData(show: false),
-                      belowBarData: BarAreaData(show: true, color: const Color(0xFF00E5FF).withOpacity(0.1)),
+                      belowBarData: BarAreaData(show: true, color: const Color(0xFF00E5FF).withValues(alpha: .1)),
                     )
                   ],
                   // EKSEN İSİMLERİ VE DEĞERLERİ (X ve Y Ekseni)
@@ -281,15 +281,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       sideTitles: SideTitles(
                         showTitles: true,
                         reservedSize: 22, // Yazılar için bırakılan boşluk
+                        interval: 5,
                         getTitlesWidget: (value, meta) {
-                          // Sadece 5'in katları olan saniyeleri yaz ki kalabalık olmasın
-                          if (value % 5 == 0) {
-                            return Padding(
-                              padding: const EdgeInsets.only(top: 5.0),
-                              child: Text("${value.toInt()}s", style: const TextStyle(color: Colors.grey, fontSize: 10)),
-                            );
-                          }
-                          return const SizedBox.shrink(); // Diğerlerini boş bırak
+                          return Padding(
+                            padding: const EdgeInsets.only(top: 5.0),
+                            child: Text("${value.toInt()}s", style: const TextStyle(color: Colors.grey, fontSize: 10)),
+                          );
                         },
                       ),
                     ),

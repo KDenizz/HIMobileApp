@@ -6,32 +6,46 @@ import 'zone_engine.dart';
 class DataSimulator {
   final ZoneEngine _engine = ZoneEngine();
   final Random _random = Random();
+  
+  // DÜZELTME 4: Artık her seferinde yeni Stream üretmek yerine, 
+  // herkesin aynı veriyi dinleyebileceği bir "Yayın (Broadcast)" kanalı kurduk.
+  final StreamController<ZAxisData> _controller = StreamController<ZAxisData>.broadcast();
+  Stream<ZAxisData> get zAxisStream => _controller.stream;
 
-  // Stream: Flutter'da "sürekli akan veri borusu" demektir. 
-  // Su yerine ZAxisData paketleri akacak.
-  Stream<ZAxisData> get zAxisStream async* {
-    double time = 0;
-    while (true) {
-      // Saniyede 2 kere veri gönder (500 milisaniye bekle)
-      await Future.delayed(const Duration(milliseconds: 500));
+  Timer? _timer;
+  double _time = 0;
+
+  // Sınıf çağrıldığında simülasyonu otomatik başlat
+  DataSimulator() {
+    _startSimulation();
+  }
+
+  void _startSimulation() {
+    _timer = Timer.periodic(const Duration(milliseconds: 500), (timer) {
+      _time += 0.5;
       
-      time += 0.5;
-      // Gerçeğe yakın dalgalanan bir RMS simülasyonu (Sinüs dalgası + Rastgele gürültü)
-      double baseRms = 2.5 + sin(time) * 10.0; 
-      double noise = (_random.nextDouble());
+      // DÜZELTME 5: Daha gerçekçi, endüstriyel titreşim dalgalanması (2.0 ile 5.0 arası)
+      double baseRms = 3.5 + sin(_time) * 1.5; 
+      double noise = (_random.nextDouble() - 0.5) * 0.5; // Hafif sensör gürültüsü
+      
       double currentRms = baseRms + noise;
-      if (currentRms < 0) currentRms = 0.1; // Eksiye düşmesin
+      if (currentRms < 0) currentRms = 0.1; // Negatife inme koruması
 
-      // Ürettiğimiz sahte RMS'i beynimize (ZoneEngine) sorup rengini/harfini öğreniyoruz
       String currentZone = _engine.evaluateZone(currentRms);
 
-      // Boruya (Stream) yeni veri paketini fırlat
-      yield ZAxisData(
+      // Üretilen veriyi kanala (Stream) fırlat
+      _controller.add(ZAxisData(
         rms: currentRms,
         peak: currentRms * 1.4, 
-        temperature: 30.0 + (_random.nextDouble() * 2), // 30-32 derece arası
+        temperature: 30.0 + (_random.nextDouble() * 2), // 30-32 derece arası stabil
         zone: currentZone,
-      );
-    }
+      ));
+    });
+  }
+
+  // Hafıza sızıntısını önlemek için kapatma metodu
+  void dispose() {
+    _timer?.cancel();
+    _controller.close();
   }
 }
