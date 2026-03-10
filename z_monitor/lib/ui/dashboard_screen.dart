@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../core/data_models.dart';
 import '../core/simulator.dart';
+import '../core/zone_engine.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -13,6 +14,7 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   final DataSimulator _simulator = DataSimulator();
+  final ZoneEngine _zoneEngine = ZoneEngine();
   late StreamSubscription<ZAxisData> _subscription;
   
   // EKRANDAKİ KARTLARIN LİSTESİ (Başlangıçta 1 tane Z-RMS kartı olsun)
@@ -85,39 +87,42 @@ class _DashboardScreenState extends State<DashboardScreen> {
       backgroundColor: const Color(0xFF0D0D0D), // Simsiyah arka plan
       
       // 1. SABİT ÜST BAR (Connection Box)
-      appBar: PreferredSize(
-        preferredSize: const Size.fromHeight(80),
-        child: Container(
-          margin: const EdgeInsets.only(top: 40, left: 10, right: 10),
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: const Color(0xFF1A1A1A),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: const Color(0xFF333333)),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: const [
-                  Text("Bağlı Cihaz", style: TextStyle(color: Colors.grey, fontSize: 12)),
-                  Text("Z-Sensor_01 ▼", style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
-                ],
-              ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: const [
-                  Text("🟢 Bağlı", style: TextStyle(color: Color(0xFF2ecc71), fontSize: 14, fontWeight: FontWeight.bold)),
-                  Text("RSSI: -41 dBm", style: TextStyle(color: Colors.grey, fontSize: 12)),
-                ],
-              )
-            ],
+        appBar: PreferredSize(
+        preferredSize: const Size.fromHeight(90), // Yüksekliği 80'den 90'a çıkardık ki rahat sığsın
+        child: SafeArea( // Yazıların telefonun saatine/şarjına (çentiğe) karışmasını önler
+          child: Container(
+            margin: const EdgeInsets.only(top: 10, left: 10, right: 10), // 40 olan tepe boşluğunu 10'a indirdik
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1A1A1A),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFF333333)),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: const [
+                    Text("Bağlı Cihaz", style: TextStyle(color: Colors.grey, fontSize: 12)),
+                    Text("Z-Sensor_01 ▼", style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                  ],
+                ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: const [
+                    Text("🟢 Bağlı", style: TextStyle(color: Color(0xFF2ecc71), fontSize: 14, fontWeight: FontWeight.bold)),
+                    Text("RSSI: -41 dBm", style: TextStyle(color: Colors.grey, fontSize: 12)),
+                  ],
+                )
+              ],
+            ),
           ),
         ),
       ),
+        
 
       // 2. DİNAMİK LİSTE (Kartların Alt Alta Dizildiği Yer)
       body: ListView.builder(
@@ -149,6 +154,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
   // --- KART TASARIMI (LEGO PARÇASI) ---
   Widget _buildFeatureCard(int index) {
     var card = _activeCards[index];
+    Color currentColor = const Color.fromARGB(255, 214, 244, 248);
+
+    if (card.selectedFeature == "Z-RMS") {
+      String zoneChar = _zoneEngine.evaluateZone(card.currentVal);
+      currentColor = _zoneEngine.getZoneColor(zoneChar);
+    }
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
@@ -163,6 +174,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
           // Üst Satır: Combo Box ve Silme Butonu
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
+
+
             children: [
               // Açılır Menü (Feature Seçimi)
               Container(
@@ -197,11 +210,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
           
           const SizedBox(height: 10),
 
+
           // Değerler Satırı: Current, Max, Min
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              _buildValueCol("Current", card.currentVal.toStringAsFixed(2), const Color(0xFF00E5FF), 28),
+              _buildValueCol("Current", card.currentVal.toStringAsFixed(2), currentColor, 28),
               _buildValueCol("Max", card.maxVal == -9999.0 ? "-" : card.maxVal.toStringAsFixed(2), Colors.white, 16),
               _buildValueCol("Min", card.minVal == 9999.0 ? "-" : card.minVal.toStringAsFixed(2), Colors.white, 16),
             ],
@@ -243,7 +257,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               child: LineChart(
                 LineChartData(
                   minY: 0,
-                  maxY: 10,
+                  maxY: card.maxVal == -9999.0 ? 10.0 : (card.maxVal * 1.2),
                   minX: card.chartData.isEmpty ? 0 : card.chartData.first.x,
                   maxX: card.chartData.isEmpty ? 20 : card.chartData.last.x,
                   lineBarsData: [
@@ -256,13 +270,50 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       belowBarData: BarAreaData(show: true, color: const Color(0xFF00E5FF).withOpacity(0.1)),
                     )
                   ],
-                  titlesData: const FlTitlesData(show: false), // Eksen yazılarını tamamen gizledik (Sade görünüm)
-                  gridData: FlGridData(
-                    show: true,
-                    drawVerticalLine: false,
-                    getDrawingHorizontalLine: (value) => const FlLine(color: Color(0xFF222222), strokeWidth: 1),
+                  // EKSEN İSİMLERİ VE DEĞERLERİ (X ve Y Ekseni)
+                  titlesData: FlTitlesData(
+                    show: true, // Yazıları açtık
+                    topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)), // Üstü gizle
+                    rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)), // Sağı gizle
+                    
+                    // ALT EKSEN (X - Zaman)
+                    bottomTitles: AxisTitles(
+                      sideTitles: SideTitles(
+                        showTitles: true,
+                        reservedSize: 22, // Yazılar için bırakılan boşluk
+                        getTitlesWidget: (value, meta) {
+                          // Sadece 5'in katları olan saniyeleri yaz ki kalabalık olmasın
+                          if (value % 5 == 0) {
+                            return Padding(
+                              padding: const EdgeInsets.only(top: 5.0),
+                              child: Text("${value.toInt()}s", style: const TextStyle(color: Colors.grey, fontSize: 10)),
+                            );
+                          }
+                          return const SizedBox.shrink(); // Diğerlerini boş bırak
+                        },
+                      ),
+                    ),
+
+                    // SOL EKSEN (Y - Değerler)
+                    leftTitles: AxisTitles(
+                      sideTitles: SideTitles(
+                        showTitles: true,
+                        reservedSize: 30, // Değerler için sol tarafta bırakılan boşluk
+                        getTitlesWidget: (value, meta) {
+                          return Text(value.toStringAsFixed(1), style: const TextStyle(color: Colors.grey, fontSize: 10));
+                        },
+                      ),
+                    ),
                   ),
-                  borderData: FlBorderData(show: true, border: Border.all(color: const Color(0xFF333333))),
+                  
+                  // Grafiğin etrafındaki çerçeveyi de belirginleştirelim
+                  borderData: FlBorderData(
+                    show: true, 
+                    border: const Border(
+                      bottom: BorderSide(color: Color(0xFF333333), width: 1), // Sadece alt çizgi
+                      left: BorderSide(color: Color(0xFF333333), width: 1),   // Sadece sol çizgi
+                    )
+                  ),
                 ),
               ),
             )
