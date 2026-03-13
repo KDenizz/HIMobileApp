@@ -39,8 +39,8 @@ class FeatureCardModel {
 
   // Reset butonuna basıldığında çağrılacak fonksiyon
   void resetMaxMin() {
-    maxVal = currentVal;
-    minVal = currentVal;
+    maxVal = -9999.0;
+    minVal = 9999.0;
     chartData.clear();
   }
 }

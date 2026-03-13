@@ -22,19 +22,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
     FeatureCardModel(selectedFeature: "Z-RMS", isChartVisible: true)
   ];
   
+  bool _isConnected = false;
+  String _deviceName = "Select Device...";
   double _currentTime = 0.0;
-  ZAxisData _latestData = ZAxisData.empty();
 
   // Seçilebilecek özelliklerin havuzu
   final List<String> _availableFeatures = ["Z-RMS", "Z-Peak", "Temperature"];
+  String _getUnit(String feature) {
+    if (feature.contains("RMS") || feature.contains("Peak")) return " mm/s";
+    if (feature == "Temperature") return " °C";
+    return "";
+  }
 
   @override
   void initState() {
     super.initState();
     // Simülatörden (ileride Bluetooth'tan) gelen veriyi dinliyoruz
     _subscription = _simulator.zAxisStream.listen((data) {
+      if (!_isConnected) {
+        return;
+      }
       setState(() {
-        _latestData = data;
         _currentTime += 0.5;
 
         // Ekranda kaç tane kart açıksa, hepsinin değerlerini anlık olarak güncelle!
@@ -43,8 +51,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
           double newVal = 0.0;
           if (card.selectedFeature == "Z-RMS") {
             newVal = data.rms;
-          } else if (card.selectedFeature == "Z-Peak") newVal = data.peak;
-          else if (card.selectedFeature == "Temperature") newVal = data.temperature;
+          } else if (card.selectedFeature == "Z-Peak"){
+            newVal = data.peak;
+          } 
+          else if (card.selectedFeature == "Temperature"){
+            newVal = data.temperature;            
+          } 
 
           // Değerleri Güncelle
           card.currentVal = newVal;
@@ -88,41 +100,45 @@ class _DashboardScreenState extends State<DashboardScreen> {
       
       // 1. SABİT ÜST BAR (Connection Box)
         appBar: PreferredSize(
-        preferredSize: const Size.fromHeight(90), // Yüksekliği 80'den 90'a çıkardık ki rahat sığsın
-        child: SafeArea( // Yazıların telefonun saatine/şarjına (çentiğe) karışmasını önler
-          child: Container(
-            margin: const EdgeInsets.only(top: 10, left: 10, right: 10), // 40 olan tepe boşluğunu 10'a indirdik
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: const Color(0xFF1A1A1A),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFF333333)),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: const [
-                    Text("Bağlı Cihaz", style: TextStyle(color: Colors.grey, fontSize: 12)),
-                    Text("Z-Sensor_01 ▼", style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
-                  ],
-                ),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: const [
-                    Text("🟢 Bağlı", style: TextStyle(color: Color(0xFF2ecc71), fontSize: 14, fontWeight: FontWeight.bold)),
-                    Text("RSSI: -41 dBm", style: TextStyle(color: Colors.grey, fontSize: 12)),
-                  ],
-                )
-              ],
+        preferredSize: const Size.fromHeight(90),
+        child: SafeArea(
+          child: InkWell(
+            onTap: _showConnectionDialog, // Tıklanınca popup açılacak
+            child: Container(
+              margin: const EdgeInsets.only(top: 10, left: 10, right: 10),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1A1A1A),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: _isConnected ? const Color(0xFF2ecc71) : const Color(0xFF333333)), // Bağlıysa yeşil çerçeve
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Text("Connected Device", style: TextStyle(color: Colors.grey, fontSize: 12)),
+                      Text("$_deviceName ▼", style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(_isConnected ? "🟢 Connected" : "🔴 Disconnected", 
+                        style: TextStyle(color: _isConnected ? const Color(0xFF2ecc71) : Colors.redAccent, fontSize: 14, fontWeight: FontWeight.bold)),
+                      Text( _isConnected ? "Tap to disconnect/edit" : "Tap to connect", style: const TextStyle(color: Colors.grey, fontSize: 10)),
+                    ],
+                  )
+                ],
+              ),
             ),
           ),
         ),
       ),
-        
+
 
       // 2. DİNAMİK LİSTE (Kartların Alt Alta Dizildiği Yer)
       body: ListView.builder(
@@ -141,7 +157,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         child: ElevatedButton.icon(
           onPressed: _addNewCard,
           icon: const Icon(Icons.add, color: Colors.white),
-          label: const Text("YENİ VERİ İZLE", style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+          label: const Text("NEW DATA MONITOR", style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
           style: ElevatedButton.styleFrom(
             backgroundColor: const Color(0xFF3498db),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -212,38 +228,56 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
 
           // Değerler Satırı: Current, Max, Min
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              _buildValueCol("Current", card.currentVal.toStringAsFixed(2), currentColor, 28),
-              _buildValueCol("Max", card.maxVal == -9999.0 ? "-" : card.maxVal.toStringAsFixed(2), Colors.white, 16),
-              _buildValueCol("Min", card.minVal == 9999.0 ? "-" : card.minVal.toStringAsFixed(2), Colors.white, 16),
-            ],
-          ),
+        // Değerler Satırı: Current, Max, Min
+          Builder(builder: (context) {
+            String unit = card.selectedFeature == "Temperature" ? "°C" : "mm/s";
+            return Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                _buildValueCol("Current", "${card.currentVal.toStringAsFixed(2)} $unit", currentColor, 28),
+                _buildValueCol("Max", card.maxVal == -9999.0 ? "-" : "${card.maxVal.toStringAsFixed(2)} $unit", Colors.white, 16),
+                _buildValueCol("Min", card.minVal == 9999.0 ? "-" : "${card.minVal.toStringAsFixed(2)} $unit", Colors.white, 16),
+              ],
+            );
+          }),
 
           const SizedBox(height: 15),
           const Divider(color: Color(0xFF333333), thickness: 1),
 
           // Alt Butonlar: Grafik Aç/Kapat ve Reset
-          Row(
+           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              TextButton.icon(
-                onPressed: () {
+              InkWell(
+                onTap: () {
                   setState(() {
                     card.isChartVisible = !card.isChartVisible;
-                    if (card.isChartVisible) card.chartData.clear(); // Açılırken grafiği temiz başlat
+                    if (card.isChartVisible) card.chartData.clear();
                   });
                 },
-                icon: Icon(card.isChartVisible ? Icons.show_chart : Icons.bar_chart, color: Colors.grey),
-                label: Text(card.isChartVisible ? "Grafiği Gizle" : "Grafiği Göster", style: const TextStyle(color: Colors.grey)),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 4.0),
+                  child: Row(
+                    children: [
+                      Icon(card.isChartVisible ? Icons.show_chart : Icons.bar_chart, color: Colors.grey, size: 16),
+                      const SizedBox(width: 4),
+                      Text(card.isChartVisible ? "Hide Chart" : "Show Chart", style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                    ],
+                  ),
+                ),
               ),
-              TextButton.icon(
-                onPressed: () {
-                  setState(() => card.resetMaxMin());
-                },
-                icon: const Icon(Icons.refresh, color: Colors.grey),
-                label: const Text("Reset", style: TextStyle(color: Colors.grey)),
+              InkWell(
+                onTap: () => _showResetDialog(card),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 4.0),
+                  child: Row(
+                    children: const [
+                      Icon(Icons.refresh, color: Colors.grey, size: 16),
+                      SizedBox(width: 4),
+                      Text("Reset", style: TextStyle(color: Colors.grey, fontSize: 12)),
+                    ],
+                  ),
+                ),
               )
             ],
           ),
@@ -271,21 +305,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     )
                   ],
                   // EKSEN İSİMLERİ VE DEĞERLERİ (X ve Y Ekseni)
-                  titlesData: FlTitlesData(
-                    show: true, // Yazıları açtık
-                    topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)), // Üstü gizle
-                    rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)), // Sağı gizle
+                   titlesData: FlTitlesData(
+                    show: true, 
+                    topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)), 
+                    rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)), 
                     
                     // ALT EKSEN (X - Zaman)
                     bottomTitles: AxisTitles(
+                      axisNameWidget: const Padding(
+                        padding: EdgeInsets.only(top: 8.0),
+                        child: Text("Time (s)", style: TextStyle(color: Colors.grey, fontSize: 10, fontWeight: FontWeight.bold)),
+                      ),
+                      axisNameSize: 20,
                       sideTitles: SideTitles(
                         showTitles: true,
-                        reservedSize: 22, // Yazılar için bırakılan boşluk
+                        reservedSize: 22, 
                         interval: 5,
                         getTitlesWidget: (value, meta) {
                           return Padding(
                             padding: const EdgeInsets.only(top: 5.0),
-                            child: Text("${value.toInt()}s", style: const TextStyle(color: Colors.grey, fontSize: 10)),
+                            child: Text("${value.toInt()}", style: const TextStyle(color: Colors.grey, fontSize: 10)),
                           );
                         },
                       ),
@@ -293,15 +332,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
                     // SOL EKSEN (Y - Değerler)
                     leftTitles: AxisTitles(
+                      axisNameWidget: Text(_getUnit(card.selectedFeature).trim(), style: const TextStyle(color: Colors.grey, fontSize: 10, fontWeight: FontWeight.bold)),
+                      axisNameSize: 20,
                       sideTitles: SideTitles(
                         showTitles: true,
-                        reservedSize: 30, // Değerler için sol tarafta bırakılan boşluk
+                        reservedSize: 30, 
                         getTitlesWidget: (value, meta) {
                           return Text(value.toStringAsFixed(1), style: const TextStyle(color: Colors.grey, fontSize: 10));
                         },
                       ),
                     ),
                   ),
+
                   
                   // Grafiğin etrafındaki çerçeveyi de belirginleştirelim
                   borderData: FlBorderData(
@@ -328,6 +370,89 @@ class _DashboardScreenState extends State<DashboardScreen> {
         Text(label, style: const TextStyle(color: Colors.grey, fontSize: 12)),
         Text(value, style: TextStyle(color: valColor, fontSize: valSize, fontWeight: FontWeight.bold)),
       ],
+    );
+  }
+  // --- POPUP: BAĞLANTI VE İSİMLENDİRME EKRANI ---
+  void _showConnectionDialog() {
+    TextEditingController nameController = TextEditingController(text: _deviceName == "Select Device..." ? "" : _deviceName);
+    
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF1A1A1A),
+          title: const Text("Device Connection", style: TextStyle(color: Colors.white)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nameController,
+                style: const TextStyle(color: Colors.white),
+                decoration: const InputDecoration(
+                  labelText: "Enter Machine/Port Name",
+                  labelStyle: TextStyle(color: Colors.grey),
+                  enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: Colors.grey)),
+                  focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: Color(0xFF3498db))),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            if (_isConnected) // Eğer zaten bağlıysa Disconnect butonu göster
+              TextButton(
+                onPressed: () {
+                  setState(() {
+                    _isConnected = false;
+                    _deviceName = "Select Device...";
+                  });
+                  Navigator.pop(context);
+                },
+                child: const Text("Disconnect", style: TextStyle(color: Colors.redAccent)),
+              ),
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text("Cancel", style: TextStyle(color: Colors.grey)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF3498db)),
+              onPressed: () {
+                setState(() {
+                  _deviceName = nameController.text.isEmpty ? "Unknown Machine" : nameController.text;
+                  _isConnected = true;
+                });
+                Navigator.pop(context);
+              },
+              child: const Text("Connect", style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        );
+      }
+    );
+  }
+
+  // --- POPUP: RESET ONAY EKRANI ---
+  void _showResetDialog(FeatureCardModel card) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1A1A),
+        title: const Text("Are you sure?", style: TextStyle(color: Colors.white)),
+        content: const Text("Max, Min and chart history will be cleared.", style: TextStyle(color: Colors.grey)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context), 
+            child: const Text("Cancel", style: TextStyle(color: Colors.grey))
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+            onPressed: () {
+              setState(() => card.resetMaxMin());
+              Navigator.pop(context);
+            },
+            child: const Text("Reset Data", style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      )
     );
   }
 }
